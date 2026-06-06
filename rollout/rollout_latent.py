@@ -1,11 +1,18 @@
 """
-纯 latent 空间自回归 rollout —— 修正 AR 的 VAE round-trip 问题。
-AR 用 decode 后的 pixel 当 condition, 每 chunk 一次 decode->encode, VAE 重建噪声累积;
-改法: chunk 间直接传 latent, 不经过 pixel。
+纯 latent 空间自回归 rollout。
+
+[BUG FIXED] 早期版本把上一段 latent 尾部 3 帧整体塞进新窗口 condition, 其中 slot0
+(VAE 因果"开机帧", 分布 std≈0.73) 被错配成上一段的"播放帧"latent (std≈1.13),
+逐段累积导致偏色漂移 (full PSNR ≈10dB)。
+现已修复: condition slot0 永远钉死轨迹首帧的开机帧 latent, 仅 slot1/2 用上一段尾部,
+偏色消除 (同 ckpt full PSNR 10.1 -> 12.4dB)。
+
+思路: AR 用 decode 后 pixel 当 condition 会每 chunk 一次 decode->encode 累积 VAE 重建噪声;
+本脚本 chunk 间直接传 latent, 不经过 pixel。
 
 monkey-patch:
   1. ImageEmbedderFused: pipe._cond_latent 已设时直接用它作 condition latent, 跳过 pixel encode
-  2. vae.decode: decode 前把完整 latent 存到 pipe._last_latent, 供下一 chunk 取尾部 3 帧作 condition
+  2. vae.decode: decode 前把完整 latent 存到 pipe._last_latent, 供下一 chunk 取尾部帧作 condition
   3. 每 chunk 只保存 predict 部分 latent, 最后拼接一次性 decode
 """
 import os

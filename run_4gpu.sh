@@ -1,7 +1,7 @@
 #!/bin/bash
 # 4 卡并行 rollout 评估 tower-of-hanoi val-data（86 条）
 # 用法: bash run_4gpu.sh <SCRIPT> [CKPT] [STEPS] [OUT_ROOT]
-#   SCRIPT   : rollout/rollout_pixel_feedback.py | rollout/rollout_latent_naive.py | ...
+#   SCRIPT   : rollout/rollout_pixel_feedback.py | rollout/rollout_latent.py | ...
 #   CKPT     : DiT ckpt 路径
 #   STEPS    : 去噪步数(默认5)
 #   OUT_ROOT : 输出目录
