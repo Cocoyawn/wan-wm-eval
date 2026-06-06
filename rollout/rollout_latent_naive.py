@@ -127,6 +127,7 @@ def latent_rollout(rgb_list, actions, steps):
     first_frame = rgb_list[0]
     all_pred_latents = []   # 每 chunk 的 predict latent (跳过 condition 部分)
     first_chunk_full = None
+    gt_boot_latent = None   # 轨迹首帧的"开机帧"latent (slot0), 整条 rollout 复用
 
     for i in range(num_iters):
         print(f"--- Chunk {i+1}/{num_iters} ---")
@@ -142,11 +143,13 @@ def latent_rollout(rgb_list, actions, steps):
                      num_inference_steps=steps, cfg_scale=1.0)
             full = pipe._last_latent        # [B,C,15,Hl,Wl]
             first_chunk_full = full
+            gt_boot_latent = full[:, :, 0:1].clone()   # 钉死轨迹首帧的开机帧 latent
             all_pred_latents.append(full[:, :, COND_LATENT:])   # 去掉前3 condition latent
             prev_latent = full
         else:
-            # condition = 上一 chunk latent 尾部 COND_LATENT 帧 (纯 latent, 不 decode)
-            pipe._cond_latent = prev_latent[:, :, -COND_LATENT:].clone()
+            # condition: slot0 = 轨迹首帧开机帧(钉死), slot1,2 = 上一段尾部2帧 (纯 latent)
+            pipe._cond_latent = torch.cat(
+                [gt_boot_latent, prev_latent[:, :, -(COND_LATENT-1):]], dim=2).clone()
             _ = pipe(seed=0, tiled=False, input_image=first_frame,   # input_image 仅占位
                      input_image4=[first_frame]*(CONDITION_FRAMES-1),
                      action=act, height=GEN_HEIGHT, width=GEN_WIDTH, num_frames=WINDOW,
