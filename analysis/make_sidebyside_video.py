@@ -6,7 +6,7 @@ import numpy as np
 import imageio.v2 as imageio
 from PIL import Image, ImageDraw
 
-DATA_ROOT = "/mnt/afs-h200/yuyangcheng/data/Challenge-phase1-dataset-rlinf"
+DATA_ROOT = "/path/to/Challenge-phase1-dataset-rlinf"
 GAP = 8  # 中间分隔条像素宽
 
 
@@ -52,7 +52,7 @@ def make_pair(rel_path, out_dir, save_path, psnr_mean, stride=1):
             p = np.asarray(Image.fromarray(p).resize((g.shape[1], g.shape[0])))
         g = label(g, "GT")
         p = label(p, f"GEN {psnr_mean:.1f}dB")
-        frame = np.concatenate([g, sep, p], axis=1)  # 横向并排
+        frame = np.concatenate([g, sep, p], axis=1)
         writer.append_data(frame)
     writer.close()
     print(f"  -> {save_path}  ({n} frames, stride {stride})")
@@ -67,7 +67,6 @@ def main():
                     help="指定 name 列表；缺省自动选 best/median/worst + 两组中位")
     args = ap.parse_args()
 
-    # 载入所有结果
     recs = {}
     for d in sorted(os.listdir(args.out_root)):
         pj = os.path.join(args.out_root, d, "psnr.json")

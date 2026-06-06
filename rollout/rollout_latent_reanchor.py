@@ -1,10 +1,9 @@
 """
-方案 (C-v2) 修正版纯 latent 自回归 —— 因果重锚定
-=========================================================
-根因(已用 diag_latent_drift.py 证实): Wan VAE 时间维因果, latent[0] 是
-"开机帧"(Rep 因果 padding, 单帧编码, std≈0.73), latent[k>=1] 是"播放帧"
-(每4帧一组, 依赖前帧 feat_cache, std≈1.13)。v1 把上一段的"播放帧"latent
-直接塞进新窗口的开机帧槽 0 -> 分布错配 -> 偏色漂移。
+纯 latent 自回归 rollout —— 因果重锚定。
+
+背景: Wan VAE 时间维因果, latent[0] 是"开机帧"(因果 padding, 单帧编码,
+std≈0.73), latent[k>=1] 是"播放帧"(每4帧一组, 依赖前帧 feat_cache, std≈1.13)。
+若把上一段的"播放帧"latent 直接塞进新窗口的开机帧槽 0, 会分布错配导致偏色漂移。
 
 修法: 新窗口 condition = latent[0,1,2]:
   - latent[0] (开机帧) = 上一段 pixel[48] 重新走 VAE encode -> 正确分布的开机帧
@@ -14,7 +13,7 @@
 
 实现: monkey-patch ImageEmbedderFused.process, 当 pipe._cond_latent3 已注入,
 直接用它(已是组装好的 3 帧 condition latent), 跳过内部 encode。
-我们在外部自己 encode 开机帧 + 拼接直传 latent。
+开机帧在外部自己 encode 后与直传 latent 拼接。
 """
 import os
 os.environ["WAN_ACTION_DIM"] = "14"
@@ -31,14 +30,14 @@ GEN_H, GEN_W = 544, 320
 CONDITION_FRAMES, PREDICT_FRAMES = 9, 48
 COND_LATENT = (CONDITION_FRAMES - 1) // 4 + 1          # 3
 WINDOW = CONDITION_FRAMES + PREDICT_FRAMES             # 57
-VAE_PATH = "/mnt/afs-h200/yuyangcheng/models/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
-DATA_ROOT = "/mnt/afs-h200/yuyangcheng/data/Challenge-phase1-dataset-rlinf"
+VAE_PATH = "/path/to/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
+DATA_ROOT = "/path/to/Challenge-phase1-dataset-rlinf"
 VIEW_BOUNDS = {"cam_high": (0, 180), "cam_left_wrist": (180, 360), "cam_right_wrist": (360, 540)}
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--device", type=str, default="cuda:0")
 parser.add_argument("--ckpt", type=str,
-    default="/mnt/afs-h200/yuyangcheng/data/wan64-rlinf-cache8k-resume1k/checkpoints/step-42000.safetensors")
+    default="/path/to/ckpt/step-42000.safetensors")
 parser.add_argument("--rel", type=str, default="", help="单条相对路径; 空则从 list 随机取")
 parser.add_argument("--list_file", type=str,
     default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "val_list.txt"))
@@ -54,7 +53,7 @@ pipe = WanVideoPipeline.from_pretrained(
                    ModelConfig(path=VAE_PATH, offload_device="cpu")])
 pipe.dit.to(args.device); pipe.vae.to(args.device)
 
-# ============ monkey-patch: 注入组装好的 3 帧 condition latent ============
+# monkey-patch: 注入组装好的 3 帧 condition latent
 pipe._cond_latent3 = None     # [1,C,3,Hl,Wl] 外部组装好的 condition (开机encode + 2播放直传)
 pipe._last_latent = None      # decode 前截获完整去噪 latent
 
@@ -78,7 +77,6 @@ def patched_decode(hidden_states, *a, **k):
     pipe._last_latent = hidden_states.detach().clone()
     return _orig_decode(hidden_states, *a, **k)
 pipe.vae.decode = patched_decode
-# =========================================================================
 
 
 def load_gt(folder):
@@ -143,7 +141,7 @@ def latent_rollout_v2(rgb_list, actions, steps):
             first_chunk_head = full[:, :, :COND_LATENT]
             all_pred_latents.append(full[:, :, COND_LATENT:])
         else:
-            # ---- 组装 condition latent[0,1,2] ----
+            # 组装 condition latent[0,1,2]
             # latent[0] 开机帧 = 上一段 pixel[48] 重新 encode
             z0 = encode_single_pixel(prev_anchor_pixel)                 # [1,C,1,..]
             # latent[1,2] = 上一段 slot13,14 直传 (播放帧)

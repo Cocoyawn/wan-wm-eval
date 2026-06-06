@@ -53,11 +53,9 @@ def main():
         "view_mean_psnr": {v: _mean(v) for v in VIEWS},
     }
 
-    # summary.json
     with open(os.path.join(args.out_root, "summary.json"), "w") as f:
         json.dump({"overall": overall, "per_sequence": rows}, f, indent=2)
 
-    # summary.csv
     csv_path = os.path.join(args.out_root, "summary.csv")
     fields = ["name", "num_frames", "full_mean"] + VIEWS + ["gen_seconds", "rel_path"]
     with open(csv_path, "w", newline="") as f:
@@ -66,7 +64,6 @@ def main():
         for r in sorted(ok_rows, key=lambda x: x["name"]):
             w.writerow(r)
 
-    # 控制台报告
     print("=" * 60)
     print(f"评估完成: {overall['num_evaluated']} 条 (错误 {overall['num_errors']} 条)")
     print(f"整图平均 PSNR : {overall['full_mean_psnr']:.3f} dB")

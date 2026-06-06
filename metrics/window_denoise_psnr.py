@@ -1,13 +1,11 @@
 """
-方案 (A) 逐窗口指标 eval —— 严格对齐最新训练逻辑 (train_rlinf.py)
+逐窗口指标 eval —— 对齐训练逻辑 (train_rlinf.py)
 
 对 val-data 的每条轨迹按训练同样的滑窗，计算两个指标：
   1. 去噪 loss：复用 WanTrainingModule.forward(=training_loss)，与训练 val_loss 同口径。
      timestep 随机，故每个窗口多次采样取均值降噪。
-  2. teacher-forcing PSNR：用 pipe 对该窗口一次性采样(condition=窗口首帧+context, action=窗口action)，
+  2. teacher-forcing PSNR：对该窗口一次性采样(condition=窗口首帧+context, action=窗口action)，
      decode 后与该窗口 GT 帧比 PSNR（整图+分视角）。不累积误差，反映单步预测能力。
-
-不做任何 action hack（无 actions[0]=0 / [0,-1]=-1），不构造伪 idx。
 """
 import os
 os.environ["WAN_ACTION_DIM"] = "14"
@@ -22,13 +20,12 @@ import numpy as np
 import torch
 from PIL import Image
 
-# 复用训练模块（含正确的 forward_preprocess / training_loss 通路）
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "model_training"))
 from train_rlinf import WanTrainingModule
 from diffsynth.trainers.dataset import RLinfDataset
 
-VAE_PATH = "/mnt/afs-h200/yuyangcheng/models/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
-VAL_BASE = "/mnt/afs-h200/yuyangcheng/data/Challenge-phase1-dataset-rlinf/tower-of-hanoi-game/val-data"
+VAE_PATH = "/path/to/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
+VAL_BASE = "/path/to/Challenge-phase1-dataset-rlinf/tower-of-hanoi-game/val-data"
 VIEW_BOUNDS = {"cam_high": (0, 180), "cam_left_wrist": (180, 360), "cam_right_wrist": (360, 540)}
 
 parser = argparse.ArgumentParser()
@@ -49,7 +46,6 @@ args = parser.parse_args()
 torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 
-# ---- 加载模型(单 ckpt 当 DiT + VAE)，复用 WanTrainingModule ----
 print(f"[{args.device}] 加载 ckpt={args.ckpt}")
 model = WanTrainingModule(
     model_paths=json.dumps([args.ckpt, VAE_PATH]),
@@ -86,9 +82,8 @@ def view_psnr(gen, gt):
 def window_loss(data, repeat):
     """多次随机 timestep 取均值，复用训练 forward(=training_loss)。"""
     losses = []
-    inputs = model.forward_preprocess(data)   # 跑一次 units(noise/latent 初始化)
+    inputs = model.forward_preprocess(data)
     for _ in range(repeat):
-        # forward 接受已预处理 inputs；training_loss 内部自采 timestep
         loss = model.pipe.training_loss(
             **{n: getattr(model.pipe, n) for n in model.pipe.in_iteration_models},
             **inputs,
@@ -100,7 +95,6 @@ def window_loss(data, repeat):
 def main():
     ds = RLinfDataset(base_path=[args.val_base], Ta=48, To=8,
                       retain_actions=True, action2obs_bias=False, action_dim=14)
-    # 按 (episode, 窗口) 组织；每个 episode 取前 max_windows_per_traj 个窗口
     # sample_indices: [(episode_idx, env_id, start), ...]
     by_ep = {}
     for gi, (ep, env, start) in enumerate(ds.sample_indices):
@@ -116,7 +110,6 @@ def main():
     for ep in eps:
         gis = by_ep[ep]
         if args.max_windows_per_traj > 0:
-            # 均匀取窗口
             sel = np.linspace(0, len(gis)-1, min(args.max_windows_per_traj, len(gis))).astype(int)
             gis = [gis[i] for i in sel]
         ep_path = ds.episode_info[ep][0]

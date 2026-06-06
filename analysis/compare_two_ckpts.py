@@ -49,7 +49,6 @@ def main():
     common = sorted(set(A) & set(B))
     print(f"{args.a_name}: {len(A)} 条, {args.b_name}: {len(B)} 条, 公共 {len(common)} 条")
 
-    # ===== 1. 叠加衰减曲线 =====
     fig, ax = plt.subplots(figsize=(11, 6))
     x = np.arange(args.cap)
     ax.plot(x, decay([A[k]["full_pf"] for k in A], args.cap), label=f"{args.a_name} full", color="#1f77b4", lw=2)
@@ -61,7 +60,6 @@ def main():
     plt.savefig(p1, dpi=120); plt.close()
     print(f"[1] 叠加衰减曲线 -> {p1}")
 
-    # ===== 2. 分组+整体 均值对比柱状图 =====
     def group_mean(recs, dt=None):
         vals = [r["full_mean"] for r in recs.values()
                 if (dt is None or r["data_type"] == dt) and np.isfinite(r["full_mean"])]
@@ -83,7 +81,7 @@ def main():
     plt.savefig(p2, dpi=120); plt.close()
     print(f"[2] 分组对比柱状图 -> {p2}")
 
-    # ===== 3. 配对差异（同一条轨迹 B-A）=====
+    # 配对差异：同一条轨迹 B-A
     diffs = []
     for k in common:
         d = B[k]["full_mean"] - A[k]["full_mean"]
@@ -91,7 +89,6 @@ def main():
     diffs.sort(key=lambda r: r[3])
     darr = np.array([r[3] for r in diffs])
 
-    # 直方图
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.hist(darr, bins=25, color="#7f7f7f", edgecolor="black")
     ax.axvline(0, color="black", ls="--")
@@ -103,7 +100,6 @@ def main():
     plt.savefig(p3, dpi=120); plt.close()
     print(f"[3] 配对差异直方图 -> {p3}")
 
-    # CSV + 文字汇总
     with open(os.path.join(args.out, "paired_diff.csv"), "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["name", f"{args.a_name}", f"{args.b_name}", "diff_B_minus_A", "data_type"])

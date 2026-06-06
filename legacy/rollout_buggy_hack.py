@@ -13,20 +13,18 @@ from diffsynth.pipelines.wan_video_new import WanVideoPipeline, ModelConfig
 from diffsynth import save_video
 from tqdm import tqdm
 
-# =========================================================
-# 配置常量（对齐 tower-of-hanoi 训练脚本 Wan2.2-TI2V-5B_rlinf.sh）
+# 配置常量（对齐训练脚本）：
 #   --height 544 --width 320 --num_frames 57
 #   --condition_frames 9 --Ta 48 --To 8 --action_dim 14
-# =========================================================
 GEN_HEIGHT = 544
 GEN_WIDTH = 320
 CONDITION_FRAMES = 9
 PREDICT_FRAMES = 48
 STEPS = 5
 
-DATA_ROOT = "/mnt/afs-h200/yuyangcheng/data/Challenge-phase1-dataset-rlinf"
-CKPT_PATH = "/mnt/afs-h200/yuyangcheng/data/tower-of-hanoi-game/epoch-99.safetensors"
-VAE_PATH = "/mnt/afs-h200/yuyangcheng/models/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
+DATA_ROOT = "/path/to/Challenge-phase1-dataset-rlinf"
+CKPT_PATH = "/path/to/ckpt/epoch-99.safetensors"
+VAE_PATH = "/path/to/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
 
 # 视角竖直拼接边界（实测：有效 540 行 = 3×180，底部 [540:544] 为黑色 padding）
 VIEW_BOUNDS = {
@@ -35,9 +33,7 @@ VIEW_BOUNDS = {
     "cam_right_wrist": (360, 540),
 }
 
-# =========================================================
-# 0. 参数解析
-# =========================================================
+# 参数解析
 parser = argparse.ArgumentParser()
 parser.add_argument("--device", type=str, default="cuda:0")
 parser.add_argument("--ckpt", type=str, default=CKPT_PATH, help="DiT ckpt 路径")
@@ -51,9 +47,7 @@ parser.add_argument("--save_png", action="store_true", help="是否额外保存�
 parser.add_argument("--save_gt", action="store_true", help="是否额外保存 GT 视频用于对比")
 args_cli = parser.parse_args()
 
-# =========================================================
-# 1. 世界模型加载
-# =========================================================
+# 世界模型加载
 print(f"[{args_cli.device}] 加载模型 ckpt={args_cli.ckpt}")
 pipe = WanVideoPipeline.from_pretrained(
     torch_dtype=torch.bfloat16,
@@ -67,9 +61,6 @@ pipe.dit.to(args_cli.device)
 pipe.vae.to(args_cli.device)
 
 
-# =========================================================
-# 2. Helpers
-# =========================================================
 def load_gt_npy_folder(folder):
     """读取 rgb.npy + actions.npy，返回 (List[PIL.Image] 544x320, actions[T,14])。"""
     rgb = np.load(os.path.join(folder, "rgb.npy"))
@@ -158,9 +149,7 @@ def compute_psnr(gen_frames, gt_frames):
     return result
 
 
-# =========================================================
-# 3. 自回归生成（严格输出 action_len 帧）—— 逻辑同 4eval.py，仅改分辨率 + 动作 copy
-# =========================================================
+# 自回归生成（严格输出 action_len 帧）
 def generate_sequence(rgb_list, actions, condition_frames=CONDITION_FRAMES,
                       predict_frames=PREDICT_FRAMES, steps=STEPS):
     # 防止就地修改 GT 动作数组（原脚本隐患）
@@ -224,9 +213,7 @@ def generate_sequence(rgb_list, actions, condition_frames=CONDITION_FRAMES,
     return generated_frames
 
 
-# =========================================================
-# 4. 处理单条序列
-# =========================================================
+# 处理单条序列
 def process_one_sequence(rel_path, out_root, save_png=False, save_gt=False):
     folder = os.path.join(DATA_ROOT, rel_path)
     print(f"\n=== 处理 {folder} ===")
@@ -277,9 +264,7 @@ def process_one_sequence(rel_path, out_root, save_png=False, save_gt=False):
     return psnr_out
 
 
-# =========================================================
-# 5. 批处理（支持分片）
-# =========================================================
+# 批处理（支持分片）
 if __name__ == "__main__":
     with open(args_cli.list_file) as f:
         all_items = [ln.strip() for ln in f if ln.strip()]

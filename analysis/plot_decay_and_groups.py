@@ -56,7 +56,6 @@ def main():
     recs = load_all(args.out_root)
     print(f"载入 {len(recs)} 条")
 
-    # ============ 1. PSNR 衰减曲线 ============
     cap = args.cap
     full_mean, full_cnt = decay_curve([r["full_pf"] for r in recs], max_len=cap)
     view_curves = {v: decay_curve([r["view_pf"][v] for r in recs], max_len=cap)[0] for v in VIEWS}
@@ -82,12 +81,10 @@ def main():
     plt.savefig(curve_path, dpi=120)
     plt.close()
     print(f"[1] 衰减曲线 -> {curve_path}")
-    # 同时存曲线数据
     np.savez(os.path.join(args.out_root, "psnr_decay_curve.npz"),
              frame_idx=x, full=full_mean, count=full_cnt,
              **{v: view_curves[v] for v in VIEWS})
 
-    # ============ 2. 分组统计 ============
     groups = {}
     for r in recs:
         groups.setdefault(r["data_type"], []).append(r)
@@ -112,7 +109,6 @@ def main():
     with open(os.path.join(args.out_root, "group_stats.json"), "w") as f:
         json.dump(group_report, f, indent=2)
 
-    # 控制台 + csv
     print("\n[2] 分组统计 (整图 PSNR):")
     print(f"  {'group':24s} {'n':>3s} {'mean':>8s} {'std':>6s} {'min':>7s} {'max':>7s}")
     for g, s in group_report.items():
@@ -129,7 +125,6 @@ def main():
                         round(s["cam_high_mean"], 3), round(s["cam_left_wrist_mean"], 3),
                         round(s["cam_right_wrist_mean"], 3)])
 
-    # ============ 3. 分组对比柱状图 ============
     fig, ax = plt.subplots(figsize=(9, 5))
     glist = [g for g in group_report if g != "ALL"]
     metrics = ["full_mean"] + [f"{v}_mean" for v in VIEWS]

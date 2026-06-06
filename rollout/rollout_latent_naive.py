@@ -1,16 +1,12 @@
 """
-方案 (C) 纯 latent 空间自回归 rollout —— 修正 AR infer 的 VAE round-trip 问题
-(同事朱方琪指出: ar 用 decode 后的 pixel 当 condition, 每 chunk 一次 decode->encode,
- VAE 重建噪声快速累积。正确做法: chunk 间直接传 latent, 不经过 pixel。)
+纯 latent 空间自回归 rollout —— 修正 AR 的 VAE round-trip 问题。
+AR 用 decode 后的 pixel 当 condition, 每 chunk 一次 decode->encode, VAE 重建噪声累积;
+改法: chunk 间直接传 latent, 不经过 pixel。
 
-实现: 不改 pipe 源码, 用 monkey-patch:
-  1. patch ImageEmbedderFused: 当 pipe._cond_latent 已设, 直接用它作 condition latent,
-     跳过 pixel encode (避免 encode 噪声)。
-  2. patch vae.decode: decode 前把去噪后的完整 latent 存到 pipe._last_latent,
-     供下一 chunk 取尾部 3 帧作 condition (避免 decode 噪声)。
-  3. 每 chunk 只保存 predict 部分的 latent; 最后拼接所有 latent 一次性 decode 出视频。
-
-action 仍按训练语义 build_action_window 构造 (无 hack)。
+monkey-patch:
+  1. ImageEmbedderFused: pipe._cond_latent 已设时直接用它作 condition latent, 跳过 pixel encode
+  2. vae.decode: decode 前把完整 latent 存到 pipe._last_latent, 供下一 chunk 取尾部 3 帧作 condition
+  3. 每 chunk 只保存 predict 部分 latent, 最后拼接一次性 decode
 """
 import os
 os.environ["WAN_ACTION_DIM"] = "14"
@@ -33,8 +29,8 @@ GEN_HEIGHT, GEN_WIDTH = 544, 320
 CONDITION_FRAMES, PREDICT_FRAMES = 9, 48
 COND_LATENT = (CONDITION_FRAMES - 1) // 4 + 1            # 3
 WINDOW = CONDITION_FRAMES + PREDICT_FRAMES              # 57
-VAE_PATH = "/mnt/afs-h200/yuyangcheng/models/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
-DATA_ROOT = "/mnt/afs-h200/yuyangcheng/data/Challenge-phase1-dataset-rlinf"
+VAE_PATH = "/path/to/Wan2.2-TI2V-5B/Wan2.2_VAE.pth"
+DATA_ROOT = "/path/to/Challenge-phase1-dataset-rlinf"
 VIEW_BOUNDS = {"cam_high": (0, 180), "cam_left_wrist": (180, 360), "cam_right_wrist": (360, 540)}
 
 parser = argparse.ArgumentParser()
