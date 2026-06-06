@@ -1,0 +1,14 @@
+# outputs / logs / caches
+outputs/
+logs/
+*.mp4
+*.png
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# 大文件 / 模型 / 数据 (不入库)
+*.safetensors
+*.pth
+*.npy
